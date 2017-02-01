@@ -8,3 +8,5 @@ DRMM
 umls
 tags
 *.pyc
+.vscode
+*.json
