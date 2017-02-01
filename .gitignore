@@ -4,3 +4,7 @@ logs
 *.pk
 data
 target
+DRMM
+umls
+tags
+*.pyc
