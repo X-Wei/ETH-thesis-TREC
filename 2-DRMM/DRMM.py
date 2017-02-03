@@ -1,8 +1,8 @@
+import sys
 from tqdm import tqdm 
 from keras.models import Sequential, Model
 from keras.layers import Dense, Activation, InputLayer, Flatten, Input, Merge, merge, Reshape
 import keras.backend as K
-from keras.callbacks import EarlyStopping, TensorBoard
 import tensorflow as tf
 import numpy as np 
 import pydot
@@ -10,11 +10,7 @@ from IPython.display import SVG
 from keras.utils.visualize_util import model_to_dot
 
 np.random.seed(1)
-N_HISTBINS = 30 
-BATCH_SZ = 64
-N_EPOCH = 10
-LOGDIR = './logs/DRMM_0125'
-
+from settings import * 
 
 # helper function: model visualization 
 def viz_model(model):
@@ -77,7 +73,6 @@ def ranking_acc(y_true, y_pred):
     y_pred = y_pred > 0 
     return K.mean(y_pred)
 
-##### the function to give a DRMM model with custom query length 
 def gen_DRMM_model(QLEN, feed_forward = feed_forward): 
     '''
     generates a DRMM model for query length = `QLEN`
@@ -131,87 +126,3 @@ def gen_DRMM_model(QLEN, feed_forward = feed_forward):
     ranking_model.compile(optimizer='adagrad', loss=pairwise_hinge, metrics=[ranking_acc])
     ranking_model.initial_weights = ranking_model.get_weights()
     return scoring_model, ranking_model
-
-# generator for model training
-def batch_generator(idx_pairs, batch_size=BATCH_SZ): 
-    # ** parameter `idx_pairs` is list of tuple (qid, pos_docid, neg_docid)**
-    np.random.shuffle(idx_pairs)
-    batches_pre_epoch = len(idx_pairs) // batch_size
-    samples_per_epoch = batches_pre_epoch * batch_size # make samples_per_epoch a multiple of batch size
-    counter = 0
-    y_true_batch_dummy = np.ones((batch_size))
-    while 1:
-        idx_batch = idx_pairs[batch_size*counter: min(samples_per_epoch, batch_size*(counter+1))]
-        idfs_batch, pos_batch, neg_batch = [], [], []
-        for qid, pos_docid, neg_docid in idx_batch:
-            idfs_batch.append(IDFs[qid])
-            pos_batch.append(qid_docid2histvec[(qid,pos_docid)].reshape(QLEN,30))
-            neg_batch.append(qid_docid2histvec[(qid,neg_docid)].reshape(QLEN,30))
-        idfs_batch, pos_batch, neg_batch = map(np.array, [idfs_batch, pos_batch, neg_batch])
-#         print idfs_batch.shape, pos_batch.shape, neg_batch.shape
-        counter += 1
-        if (counter >= batches_pre_epoch):
-            np.random.shuffle(idx_pairs)
-            counter=0
-        yield [idfs_batch, pos_batch, neg_batch], y_true_batch_dummy
-
-def get_idx_pairs(qids, instances):
-    idx_pairs = []
-    for qid in qids:
-        for posid, negid in instances[qid]:
-            idx_pairs.append( (qid,posid, negid) )
-    return idx_pairs
-
-def shuffle_weights(model, weights=None):
-    """Randomly permute the weights in `model`, or the given `weights`.
-    This is a fast approximation of re-initializing the weights of a model.
-    Assumes weights are distributed independently of the dimensions of the weight tensors
-      (i.e., the weights have the same distribution along each dimension).
-    :param Model model: Modify the weights of the given model.
-    :param list(ndarray) weights: The model's weights will be replaced by a random permutation of these weights.
-      If `None`, permute the model's current weights.
-    """
-    if weights is None:
-        weights = model.get_weights()
-    weights = [np.random.permutation(w.flat).reshape(w.shape) for w in weights]
-    model.set_weights(weights)
-
-def TREC_output(scoring_model, qid, run_name = 'my_run', fpath = None):
-    res = [] # list of (score, pmcid) tuples
-    for docid in candidates[qid]:
-        input_idf = IDFs[qid].reshape((-1,QLEN))
-        input_hist = qid_docid2histvec[(qid,docid)]
-        score = scoring_model.predict([input_idf, input_hist])[0]
-        res.append( (score, docid) )
-    res = sorted(res, reverse=True)
-    fout = sys.stdout if fpath==None else open(fpath, 'a')
-    for rank, (score, docid) in enumerate(res[:2000]):
-        print >>fout, '%d  Q0  %s  %d  %f  %s' % (qid, docid, rank, score, run_name)
-
-_callbacks = [ EarlyStopping(monitor='val_loss', patience=2),
-               TensorBoard(log_dir=LOGDIR, histogram_freq=0, write_graph=False) ]
-
-def KFold(qids, fpath, ranking_model, scoring_model, instances, K = 5, run_name = 'my_run',  batch_size=BATCH_SZ):
-    open(fpath,'w').close() # clear previous content in file 
-    np.random.seed(0)
-    np.random.shuffle(qids)
-    fold_sz = len(qids) / K
-    for fold in xrange(K):
-        print 'fold %d' % fold, 
-        val_start, val_end = fold*fold_sz, (fold+1)*fold_sz
-        qids_val = qids[val_start:val_end] # train/val queries for each fold 
-        qids_train = qids[:val_start] + qids[val_end:]
-        print qids_val
-        idx_pairs_train = get_idx_pairs(qids_train,instances)
-        idx_pairs_val = get_idx_pairs(qids_val,instances)
-        
-        shuffle_weights(ranking_model, ranking_model.initial_weights) # reset model parameters
-        ranking_model.fit_generator( batch_generator(idx_pairs_train, batch_size=batch_size), # train model 
-                    samples_per_epoch = len(idx_pairs_train)//batch_size*batch_size,
-                    nb_epoch = N_EPOCH,
-                    validation_data=batch_generator(idx_pairs_val, batch_size=batch_size),
-                    nb_val_samples=len(idx_pairs_val)//batch_size*batch_size, 
-                    callbacks = _callbacks)
-        print 'fold %d complete, outputting to %s...' % (fold, fpath)
-        for qid in qids_val:
-            TREC_output(scoring_model, qid, run_name = run_name, fpath = fpath)
