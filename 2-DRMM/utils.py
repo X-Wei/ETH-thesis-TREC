@@ -1,6 +1,4 @@
 # coding: utf-8
-import numpy as np 
-import sys
 from keras.callbacks import EarlyStopping, TensorBoard
 
 from settings import * 
@@ -69,19 +67,24 @@ def shuffle_weights(model, weights=None):
     model.set_weights(weights)
 
 
-def KFold(qids, ranking_model, scoring_model, data_pickle, K = 5, \
-            fpath=None, run_name = 'my_run', batch_size=BATCH_SZ, nb_epoch = N_EPOCH):
-    instances         = data_pickle['instances'] 
+def KFold(ranking_model, scoring_model, data_pickle,
+            K = 5, qids=range(1,31), initial_weights=None, instances=None, \
+            batch_size=BATCH_SZ, nb_epoch = N_EPOCH, verbose=1, \
+            fpath=None, run_name = 'my_run'):
+    if instances is None: 
+        instances     = data_pickle['instances'] 
     IDFs              = data_pickle['IDFs']
     qid_docid2histvec = data_pickle['qid_docid2histvec']
     candidates        = data_pickle['candidates']
+
     # wrapper functions
     def wrapper_batch_generator(idx_pairs): 
         return batch_generator(idx_pairs, qid_docid2histvec, IDFs, batch_size)
     def wrapper_TREC_output(scoring_model, qid):
         return TREC_output(qid, scoring_model, candidates, qid_docid2histvec, IDFs, run_name, fpath)
     
-    initial_weights = ranking_model.get_weights()
+    if initial_weights is None: 
+        initial_weights = ranking_model.get_weights()
     np.random.seed(0)
     np.random.shuffle(qids)
     fold_sz = len(qids) / K
@@ -103,7 +106,92 @@ def KFold(qids, ranking_model, scoring_model, data_pickle, K = 5, \
                     nb_epoch          = nb_epoch,
                     validation_data   = wrapper_batch_generator(idx_pairs_val),
                     nb_val_samples    = len(idx_pairs_val)//batch_size*batch_size, 
-                    callbacks         = _callbacks )
+                    callbacks         = _callbacks,
+                    verbose           = verbose )
         print 'fold %d complete, outputting to %s...' % (fold, fpath)
         for qid in qids_val:
             wrapper_TREC_output(scoring_model, qid)
+
+def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles'):
+    '''generate an `instance: dict[int, list<str, str>]` mapping qid to the list of (pos_docid, neg_docid) pairs
+    meaning of the parameters can be found in `data_prep.py`, these are pickled into a local file. 
+    there are 2 modes: 
+    * mode `quantiles`: sample more pairs for queries with less positive docids -- origin DRMM source code use this, cf NN4IR.cpp line 218
+    * mode `uniform`: each qid generates the same number (8000) of pairs, sample uniformly
+    note: the parameters in those 2 modes are hard-coded in this function
+    '''
+    assert mode in ('quantiles', 'uniform')
+    instances = {}
+    from numpy.random import choice 
+    np.random.seed(1)
+    if mode == 'quantiles': 
+        all_pos = sorted( n_pos.values() ) 
+        quantile_1 = all_pos[len(all_pos) * 5 / 30] # x10
+        quantile_2 = all_pos[len(all_pos) * 5 / 10 - 2] # x3
+        quantile_3 = all_pos[len(all_pos) * 9 / 10 - 1] # x1.5
+        for qid in QUERIES.keys():
+            pernegative = 20 # number of limited pairs per positive sample
+            num_of_instances = 8000 # number limit of pairs per query
+            
+            num_pos_currquery = n_pos[qid]
+            curr_pernegative = pernegative
+            curr_num_of_instance = num_of_instances # -- their trick: gen less pairs for queries with more pos docs
+            if(num_pos_currquery <= quantile_1): 
+                curr_pernegative *= 10; curr_num_of_instance *= 10
+            elif(num_pos_currquery <= quantile_2): 
+                curr_pernegative *= 3; curr_num_of_instance *= 3; 
+            elif(num_pos_currquery <= quantile_3): 
+                curr_pernegative *= 1.5; curr_num_of_instance *= 1.5; 
+            
+            rel_scores = defaultdict(list) # mapping a rel score to list of docids
+            for docid in candidates[qid]:
+                rel = relevance[(qid,docid)]
+                rel_scores[rel].append(docid)
+            scores = sorted( rel_scores.keys(), reverse=True ) # scores are sorted in desc order
+            print 'scores =',scores, 
+            total_instance = 0
+            for i in xrange(len(scores)): # scores[i] = pos score
+                for j in xrange(i+1, len(scores)): # scores[j] = neg score
+                    total_instance += len(rel_scores[scores[i]]) * len(rel_scores[scores[j]])
+            print 'total=', total_instance, 
+            total_instance = min(total_instance, curr_num_of_instance)
+            instances_for_q = []
+            for i in xrange(len(scores)):# scores are sorted in desc order
+                pos_score = scores[i]
+                cur_pos_ids = rel_scores[pos_score] # mapping a rel score to list of docids
+                cur_neg_ids = []
+                for j in xrange(i+1, len(scores)):
+                    neg_score = scores[j]
+                    cur_neg_ids += rel_scores[neg_score]# FOUND A BUG HERE
+                if len(cur_neg_ids)==0: break
+                for posid in cur_pos_ids:
+                    for negid in choice(cur_neg_ids, min(len(cur_neg_ids),int(curr_pernegative)), replace=False):
+                        instances_for_q.append( (posid,negid) )
+                    if len(instances_for_q)>=total_instance: break
+                if len(instances_for_q)>=total_instance: break
+            print 'got %d instances for query %d' % (len(instances_for_q), qid)
+            instances[qid] = instances_for_q
+            
+    elif mode == 'uniform':
+        N_PAIRS_PER_QUERY = 8000 # the smallest query (22) have 8816 possible pairs 
+        for qid in QUERIES.keys():
+            rel_scores = defaultdict(list) # mapping a rel score to list of docids
+            for docid in candidates[qid]:
+                rel = relevance[(qid,docid)]
+                rel_scores[rel].append(docid)
+            scores = sorted( rel_scores.keys(), reverse=True ) # scores are sorted in desc order
+            print 'scores =',scores, 
+            all_instances = []
+            for i in xrange(len(scores)): 
+                pos_score = scores[i]
+                for j in xrange(i+1, len(scores)): 
+                    neg_score = scores[j]
+                    for posid in rel_scores[pos_score]:
+                        for negid in rel_scores[neg_score]: 
+                            all_instances.append( (posid, negid) )
+            instances_for_q = []
+            for i in choice(len(all_instances), N_PAIRS_PER_QUERY, replace=False):
+                instances_for_q.append(all_instances[i])
+            print 'got %d instances out of %d for query %d' % (len(instances_for_q), len(all_instances), qid)
+            instances[qid] = instances_for_q
+    return instances 

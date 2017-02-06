@@ -1,16 +1,14 @@
-import sys
-from tqdm import tqdm 
+from settings import * 
 from keras.models import Sequential, Model
 from keras.layers import Dense, Activation, InputLayer, Flatten, Input, Merge, merge, Reshape
 import keras.backend as K
 import tensorflow as tf
-import numpy as np 
 import pydot
 from IPython.display import SVG
 from keras.utils.visualize_util import model_to_dot
 
 np.random.seed(1)
-from settings import * 
+
 
 # helper function: model visualization 
 def viz_model(model):
