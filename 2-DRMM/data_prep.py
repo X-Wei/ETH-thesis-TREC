@@ -78,14 +78,15 @@ def get_article_paragraphs(pmcid):
     body = tree.xpath('//body')[0]
     for p in body.xpath('.//p'):
         ret.append( p.xpath('string(.)').strip() )
-    if len(ret)>300: # some outliers have MANY <p> tags in the xml file
+    if len(ret)>200: # some outliers have MANY <p> tags in the xml file
         ret2 = [] # in this case: merge small paragraphs into larger paragraphs!!
-        mean_len = sum(len(p) for p in ret) // 300
+        mean_len = sum(len(p) for p in ret) // 200
         _buf = []; _buflen = 0
         for p in ret: 
             if _buflen >= mean_len: 
                 ret2.append('\n'.join(_buf)); _buf = [p]; _buflen = len(p)
             else: _buf.append(p); _buflen += len(p)
+        if _buf: ret2.append('\n'.join(_buf))
         ret = ret2
     return ret
 
