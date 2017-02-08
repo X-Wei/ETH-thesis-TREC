@@ -8,7 +8,15 @@ from keras.preprocessing.sequence import pad_sequences
 
 from settings import * 
 np.random.seed(1) 
+global QUERIES, MAX_QLEN, candidates, relevances, n_pos, IDFs, qid_docid2histvec, instances
 
+def memoize_1arg(f):
+    """ Memoization decorator for a function taking a SINGLE argument """
+    class memoize_1arg(dict):
+        def __missing__(self, key):
+            ret = self[key] = f(key)
+            return ret 
+    return memoize_1arg().__getitem__
 
 ### objects used in data preparation
 print '# loading objects from file'
@@ -26,8 +34,8 @@ with open(MIMIC_PK_FPATH, 'rb') as f:
     tokenizer = data_pickle['tokenizer']
     del data_pickle 
 model = load_model(MODEL_FPATH)
-get_embedvec = K.function([model.layers[0].input, K.learning_phase()],
-                                  [model.layers[-4].output])
+get_embedvec = K.function( [model.layers[0].input, K.learning_phase()],
+                           [model.layers[-4].output] )
 embedvec = lambda X: get_embedvec([X,0])[0]
 
 
@@ -37,13 +45,15 @@ def paragraph2vec(paragraph): # turn a piece of text into embedding vector
     seqs_padded = pad_sequences(seqs, maxlen=MAX_SEQ_LEN)
     return embedvec(seqs_padded)
 
+@memoize_1arg
 def get_topic(i):# returns the summary string of the ith topic
     summary = topic_tree.xpath('//topic[@number="%d"]/summary/text()'%i)[0]
     return str(summary).lower()
 
-pat = re.compile('\W*\n\W*\n')
+@memoize_1arg
 def get_query_paragraphs(i): # returns the paragraphs in topic i 
     text = '\n=====\n'.join( topic_tree.xpath('//topic[@number="%d"]/*/text()'%i) )
+    pat = re.compile('\W*\n\W*\n')
     paras = pat.split(text.lower())
     return [p.strip() for p in paras]
 
@@ -59,6 +69,7 @@ def get_article_abstract(pmcid):
         raise Exception(u'abstraction too short: '+pmcid + ret)
     return ret.lower()
 
+@memoize_1arg
 def get_article_paragraphs(pmcid):
     'returns a list of texts, each as a paragraph'
     fpath = pmcid2fpath[pmcid]
@@ -67,7 +78,27 @@ def get_article_paragraphs(pmcid):
     body = tree.xpath('//body')[0]
     for p in body.xpath('.//p'):
         ret.append( p.xpath('string(.)').strip() )
+    if len(ret)>300: # some outliers have MANY <p> tags in the xml file
+        ret2 = [] # in this case: merge small paragraphs into larger paragraphs!!
+        mean_len = sum(len(p) for p in ret) // 300
+        _buf = []; _buflen = 0
+        for p in ret: 
+            if _buflen >= mean_len: 
+                ret2.append('\n'.join(_buf)); _buf = [p]; _buflen = len(p)
+            else: _buf.append(p); _buflen += len(p)
+        ret = ret2
     return ret
+
+# @memoize_1arg # pb with memoize: the embedding vectors take too much memory...
+def get_article_embeddingvecs(pmcid):
+    # return np.vstack( [ paragraph2vec(p.encode('ascii','ignore')) for p in  )
+    seqs_padded = [] # put all paragphs together,  feed them into embedding model at once
+    for para in get_article_paragraphs(pmcid): 
+        para = para.encode('ascii','ignore')
+        seqs = tokenizer.texts_to_sequences([para.encode('utf-8')])
+        seqs_padded.append( pad_sequences(seqs, maxlen=MAX_SEQ_LEN) )
+    seqs_padded = np.vstack( seqs_padded )
+    return embedvec(seqs_padded)
 
 def get_histvec(query_para, pmcid):
     '''given a query paragraph and a docid, returns the histogram vector 
@@ -76,7 +107,7 @@ def get_histvec(query_para, pmcid):
     if query_para == PARA_PLACEHOLDER: 
         return np.zeros(30)
     qvec = paragraph2vec(query_para)
-    dvecs = np.vstack( [ paragraph2vec(p.encode('ascii','ignore')) for p in get_article_paragraphs(pmcid)] )
+    dvecs = get_article_embeddingvecs(pmcid)
     cossims = np.dot(dvecs, qvec.T) / norm(qvec) / norm(dvecs, axis=1)
     hist, _ = np.histogram( cossims, bins=30, range=(0,1) )
     ret = np.log(hist+1)
@@ -91,15 +122,16 @@ def get_query_doc_feature(qid, pmcid):
 ### data to be generated
 QUERIES           = {} # dict[int, list<str>] mapping query id to query paragraphs, padded to same length
 MAX_QLEN          = -1 # length of padded queries
-candidates        = {} # dict[int, list<str>] mapping qid to list of its candidate docids (that appeared in the qrel)
+candidates        = defaultdict(list) # dict[int, list<str>] mapping qid to list of its candidate docids (in the qrel)
 relevance         = {} # dict[(int,str), int] mapping (qid,docid) pairs to relevance (0,1,2)
-n_pos             = {} # dict[int, int] mapping qid to number of its positive docids, useful for generating new training instances
+n_pos             = {} # dict[int, int] mapping qid to number of its pos-docids, useful for generating new training instances
 IDFs              = {} # dict[int, array] mapping qid to its idf input vector
 qid_docid2histvec = {} # dict[(int,str), array] mapping  (qid, docid) to the corresponding histvec (input to DRMM)
 instances         = {} # dict[int, list<(str,str)>] mapping qid to its list of (pos_docid, neg_docid) pairs
 
 
 if __name__ == '__main__':
+    # global QUERIES, MAX_QLEN, candidates, relevances, n_pos, IDFs, qid_docid2histvec, instances
     ### populate the above-mentioned data
     print '# populate `QUERIES`'
     QUERIES = {qid:get_query_paragraphs(qid) for qid in xrange(1,31)}
@@ -108,7 +140,7 @@ if __name__ == '__main__':
 
     print '# padding queries to the same length MAX_QLEN'
     def pad_query(q, SZ=MAX_QLEN): return q + [PARA_PLACEHOLDER]*(SZ-len(q))
-    for i,q in QUERIES.iteritems():
+    for i,q in QUERIES.items():
         QUERIES[i] = pad_query(q)
 
     print '# populate `IDFs`'
@@ -166,4 +198,5 @@ if __name__ == '__main__':
     }
     with open(DRMM_PK_FPATH, 'wb') as f:
         pk.dump(data_to_pickle, f, pk.HIGHEST_PROTOCOL)
+    
     print 'all done, data is pickled into %s' % DRMM_PK_FPATH
