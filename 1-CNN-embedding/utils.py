@@ -1,5 +1,5 @@
+from settings import * 
 ### utility functions for data preparing 
-import numpy as np 
 def to_khot(sidhid2icds, icd_ctr, K):
     '''generate khot encoding dict 
     * sidhid2icds is a dict[(int,int), set(str)], maps (sid,hid) pair to all icd codes for this patient/stay

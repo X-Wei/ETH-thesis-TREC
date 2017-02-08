@@ -1,17 +1,9 @@
-
 # coding: utf-8
-
-import os, sys, time
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
-import cPickle as pk
-
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
 
-np.random.seed(1) 
 from settings import * 
+np.random.seed(1) 
 
 # ## 1. prepare Y: khot encoding (`sidhid2khot`)
 
