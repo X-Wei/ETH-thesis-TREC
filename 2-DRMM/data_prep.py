@@ -4,13 +4,14 @@ import nltk, time, re
 from numpy.linalg import norm
 from keras.models import load_model
 from keras import backend as K
-from keras.preprocessing import pad_sequences
+from keras.preprocessing.sequence import pad_sequences
 
 from settings import * 
 np.random.seed(1) 
 
 
-### variables used in data preparation
+### objects used in data preparation
+print '# loading objects from file'
 topic_tree = etree.parse(TOPICS_FPATH)
 pmcid2fpath = {} # mapping docid to its local file path 
 for subdir1 in os.listdir(PMC_PATH):
@@ -20,11 +21,13 @@ for subdir1 in os.listdir(PMC_PATH):
             pmcid = fn[:-5]
             fpath = os.path.join(diry, fn)
             pmcid2fpath[pmcid] = fpath
-with open(TOKENIZER_FPATH, 'rb') as f:
-    tokenizer = pk.load(f)
+with open(MIMIC_PK_FPATH, 'rb') as f:
+    data_pickle = pk.load(f)
+    tokenizer = data_pickle['tokenizer']
+    del data_pickle 
 model = load_model(MODEL_FPATH)
 get_embedvec = K.function([model.layers[0].input, K.learning_phase()],
-                                  [model.layers[11].output])
+                                  [model.layers[-4].output])
 embedvec = lambda X: get_embedvec([X,0])[0]
 
 
@@ -98,19 +101,22 @@ instances         = {} # dict[int, list<(str,str)>] mapping qid to its list of (
 
 if __name__ == '__main__':
     ### populate the above-mentioned data
-    # populate `QUERIES`
+    print '# populate `QUERIES`'
     QUERIES = {qid:get_query_paragraphs(qid) for qid in xrange(1,31)}
-    MAX_QLEN = max(map(len, QUERIES))
+    MAX_QLEN = max(map(len, QUERIES.values()))
     print 'max query length = %d' % MAX_QLEN
-    # padding queries to the same length MAX_QLEN
+
+    print '# padding queries to the same length MAX_QLEN'
     def pad_query(q, SZ=MAX_QLEN): return q + [PARA_PLACEHOLDER]*(SZ-len(q))
     for i,q in QUERIES.iteritems():
         QUERIES[i] = pad_query(q)
-    # populate `IDFs`
+
+    print '# populate `IDFs`'
     def idf(para): return -10 if para==PARA_PLACEHOLDER else 1.0 
     for qid in QUERIES.keys(): 
         IDFs[qid] = np.array([idf(para) for para in QUERIES[qid]])
-    # populate `candidates`, `relevance`, `n_pos`
+    
+    print '# populate `candidates`, `relevance`, `n_pos`'
     with open(QRELS_FPATH) as f:
         for line in tqdm(f, total=37707): 
             qid, _, pmcid, rel = line.split()
@@ -122,19 +128,21 @@ if __name__ == '__main__':
                 candidates[qid].append(pmcid)
                 if rel>0: n_pos[qid] += 1
             except: pass
-    # populate `qid_docid2histvec`
+
+    print '# populate `qid_docid2histvec`'
     for qid in QUERIES.keys():
         for docid in tqdm(candidates[qid]):
             _hist = get_query_doc_feature(qid, docid).reshape(1, MAX_QLEN, N_HISTBINS)
             qid_docid2histvec[(qid, docid)] = _hist
-    # populate `instances`
+    
+    print '# populate `instances`'
     from utils import gen_instances
     instances = gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles')
     
     
     ### pickle data into local files
     description = '''
-    The file contains pre-processed data as a dictionary, here are the keys of this dictionary
+    The file contains pre-processed data as a dictionary, here are the keys of this dictionary: 
     * QUERIES          : dict[int, list<str>] mapping query id to query paragraphs, padded to same length
     * MAX_QLEN         : length of padded queries
     * candidates       : dict[int, list<str>] mapping qid to list of its candidate docids (that appeared in the qrel)
@@ -146,6 +154,7 @@ if __name__ == '__main__':
     And new training instances can be generated using `gen_instances` in `utils.py`. 
     '''
     data_to_pickle = {
+        'description'      : description,
         'QUERIES'          : QUERIES,
         'MAX_QLEN'         : MAX_QLEN,
         'candidates'       : candidates,
@@ -157,3 +166,4 @@ if __name__ == '__main__':
     }
     with open(DRMM_PK_FPATH, 'wb') as f:
         pk.dump(data_to_pickle, f, pk.HIGHEST_PROTOCOL)
+    print 'all done, data is pickled into %s' % DRMM_PK_FPATH

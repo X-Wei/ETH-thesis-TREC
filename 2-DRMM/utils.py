@@ -112,6 +112,7 @@ def KFold(ranking_model, scoring_model, data_pickle,
         for qid in qids_val:
             wrapper_TREC_output(scoring_model, qid)
 
+
 def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles'):
     '''generate an `instance: dict[int, list<str, str>]` mapping qid to the list of (pos_docid, neg_docid) pairs
     meaning of the parameters can be found in `data_prep.py`, these are pickled into a local file. 
@@ -171,7 +172,7 @@ def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles'):
                 if len(instances_for_q)>=total_instance: break
             print 'got %d instances for query %d' % (len(instances_for_q), qid)
             instances[qid] = instances_for_q
-            
+
     elif mode == 'uniform':
         N_PAIRS_PER_QUERY = 8000 # the smallest query (22) have 8816 possible pairs 
         for qid in QUERIES.keys():
