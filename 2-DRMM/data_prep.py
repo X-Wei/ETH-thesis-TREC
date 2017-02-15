@@ -106,11 +106,11 @@ def get_histvec(query_para, pmcid):
     return shape = (1 * N_HISTBINS) 
     this vector is to be fed to ffwd network of DRMM'''
     if query_para == PARA_PLACEHOLDER: 
-        return np.zeros(30)
+        return np.zeros(N_HISTBINS)
     qvec = paragraph2vec(query_para)
     dvecs = get_article_embeddingvecs(pmcid)
     cossims = np.dot(dvecs, qvec.T) / norm(qvec) / norm(dvecs, axis=1)
-    hist, _ = np.histogram( cossims, bins=30, range=(0,1) )
+    hist, _ = np.histogram( cossims, bins=N_HISTBINS, range=(-1,1) )
     ret = np.log(hist+1)
     return ret 
 
@@ -125,7 +125,7 @@ QUERIES           = {} # dict[int, list<str>] mapping query id to query paragrap
 MAX_QLEN          = -1 # length of padded queries
 candidates        = defaultdict(list) # dict[int, list<str>] mapping qid to list of its candidate docids (in the qrel)
 relevance         = {} # dict[(int,str), int] mapping (qid,docid) pairs to relevance (0,1,2)
-n_pos             = {} # dict[int, int] mapping qid to number of its pos-docids, useful for generating new training instances
+n_pos             = defaultdict(int) # dict[int, int] mapping qid to number of its pos-docids, useful for generating new training instances
 IDFs              = {} # dict[int, array] mapping qid to its idf input vector
 qid_docid2histvec = {} # dict[(int,str), array] mapping  (qid, docid) to the corresponding histvec (input to DRMM)
 instances         = {} # dict[int, list<(str,str)>] mapping qid to its list of (pos_docid, neg_docid) pairs
