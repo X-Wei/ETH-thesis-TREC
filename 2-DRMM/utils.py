@@ -44,7 +44,7 @@ def TREC_output(qid, scoring_model, candidates, qid_docid2histvec, IDFs, \
                 run_name = 'my_run', fpath = None):
     res = [] # list of (score, pmcid) tuples
     for docid in candidates[qid]:
-        input_idf = IDFs[qid].reshape((1,-1)) # (-1, QLEN)
+        input_idf = np.array(IDFs[qid]).reshape((1,-1)) # (-1, QLEN)
         input_hist = qid_docid2histvec[(qid,docid)]
         score = scoring_model.predict([input_idf, input_hist])[0]
         res.append( (score, docid) )
@@ -68,11 +68,13 @@ def shuffle_weights(model, weights=None):
 
 
 def KFold(ranking_model, scoring_model, data_pickle,
-            K = 5, qids=range(1,31), initial_weights=None, instances=None, \
+            K = 5, initial_weights=None, instances=None, qids = None,\
             batch_size=BATCH_SZ, nb_epoch = N_EPOCH, verbose=1, \
             fpath=None, run_name = 'my_run'):
     if instances is None: 
         instances     = data_pickle['instances'] 
+    if qids is None: 
+        qids = data_pickle['QUERIES'].keys()
     IDFs              = data_pickle['IDFs']
     qid_docid2histvec = data_pickle['qid_docid2histvec']
     candidates        = data_pickle['candidates']
@@ -113,7 +115,7 @@ def KFold(ranking_model, scoring_model, data_pickle,
             wrapper_TREC_output(scoring_model, qid)
 
 
-def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles'):
+def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles', verbose=1):
     '''generate an `instance: dict[int, list<str, str>]` mapping qid to the list of (pos_docid, neg_docid) pairs
     meaning of the parameters can be found in `data_prep.py`, these are pickled into a local file. 
     there are 2 modes: 
@@ -149,12 +151,14 @@ def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles'):
                 rel = relevance[(qid,docid)]
                 rel_scores[rel].append(docid)
             scores = sorted( rel_scores.keys(), reverse=True ) # scores are sorted in desc order
-            print 'scores =',scores, 
+            if verbose: 
+                print 'scores =',scores, 
             total_instance = 0
             for i in xrange(len(scores)): # scores[i] = pos score
                 for j in xrange(i+1, len(scores)): # scores[j] = neg score
                     total_instance += len(rel_scores[scores[i]]) * len(rel_scores[scores[j]])
-            print 'total=', total_instance, 
+            if verbose: 
+                print 'total=', total_instance, 
             total_instance = min(total_instance, curr_num_of_instance)
             instances_for_q = []
             for i in xrange(len(scores)):# scores are sorted in desc order
@@ -170,7 +174,8 @@ def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles'):
                         instances_for_q.append( (posid,negid) )
                     if len(instances_for_q)>=total_instance: break
                 if len(instances_for_q)>=total_instance: break
-            print 'got %d instances for query %d' % (len(instances_for_q), qid)
+            if verbose: 
+                print 'got %d instances for query %d' % (len(instances_for_q), qid)
             instances[qid] = instances_for_q
 
     elif mode == 'uniform':

@@ -188,6 +188,7 @@ if __name__ == '__main__':
     '''
     data_to_pickle = {
         'description'      : description,
+        'embedding_model'  : MODEL_FPATH,
         'QUERIES'          : QUERIES,
         'MAX_QLEN'         : MAX_QLEN,
         'candidates'       : candidates,
