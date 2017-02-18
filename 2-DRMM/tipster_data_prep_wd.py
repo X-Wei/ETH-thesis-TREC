@@ -1,10 +1,8 @@
-
-
+# data preparation for original DRMM (as in the paper) ran on tipster
 from lxml import etree
 import re
 import nltk
 from numpy.linalg import norm 
-import cPickle as pk 
 
 from settings import * 
 np.random.seed(1) 
