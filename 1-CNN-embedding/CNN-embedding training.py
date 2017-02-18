@@ -1,7 +1,3 @@
-import os, sys, time
-import numpy as np
-from tqdm import tqdm
-import cPickle as pk
 from keras.layers import Dense, Input, Flatten, Dropout, Merge, Activation
 from keras.layers import Conv1D, MaxPooling1D, Embedding
 from keras.models import Sequential, load_model, Model
@@ -9,8 +5,8 @@ from keras.callbacks import Callback, EarlyStopping, TensorBoard
 import keras.backend as K
 
 
-np.random.seed(1)
 from settings import * 
+np.random.seed(1)
 
 # ### load data
 
@@ -45,7 +41,7 @@ def evaluate_model(model):
 def compile_fit_evaluate(model, quick_test=False, print_summary=True,
                          save_log=True, save_model=True, del_model=False):
     # this funciton wraps up operations on models
-    model.compile(loss='binary_crossentropy',
+    model.compile(loss='binary_crossentropy', # loss for multilabel classification
              optimizer='rmsprop',
              metrics=[multlabel_prec, multlabel_recall, multlabel_F1, multlabel_acc])
     if print_summary:
@@ -58,7 +54,7 @@ def compile_fit_evaluate(model, quick_test=False, print_summary=True,
     
     _callbacks = [EarlyStopping(monitor='val_loss', patience=2)] 
     if save_log:
-        logdir = os.path.join( LOG_PATH, time.strftime('%m%d')+'_'+str(model.name) )
+        logdir = os.path.join( LOG_PATH, DATE_TODAY+'_'+str(model.name) )
         if not os.path.exists(logdir):
             os.makedirs(logdir)
         _callbacks.append(TensorBoard(log_dir=logdir))
@@ -74,7 +70,7 @@ def compile_fit_evaluate(model, quick_test=False, print_summary=True,
     evaluate_model(model)
     
     if save_model: 
-        model_fpath = os.path.join( MODEL_PATH, time.strftime('%m%d')+'_%s.h5'% str(model.name) )
+        model_fpath = os.path.join( MODEL_PATH, DATE_TODAY+'_%s.h5'% str(model.name) )
         model.save(model_fpath)
         print 'model is saved at %s' % model_fpath
     
