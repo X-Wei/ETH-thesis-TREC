@@ -60,12 +60,12 @@ print '# populate relevance/candidates/n_pos/corpus '
 with open(TP_QRELS_FPATH) as f:
     for line in tqdm(f): 
          qid, _, docid, rel = line.split() 
+         rel = int(rel); qid = int(qid)
+         if rel>0: n_pos[qid]+=1
+         candidates[qid].append(docid)
+         relevance[(qid,docid)] = rel
          if docid not in corpus: 
              corpus[docid] = get_article_paras(docid)
-             rel = int(rel); qid = int(qid)
-             if rel>0: n_pos[qid]+=1
-             candidates[qid].append(docid)
-             relevance[(qid,docid)] = rel
 
 
 print '# calculate idf'
