@@ -64,6 +64,7 @@ for word,wd_id in word2idx.items():
 
 # output
 data_to_pickle = {
+    'tokenizer'       : tokenizer,
     'embedding_glove' : embedding_glove,
     'X_train'         : X_train,
     'Y_train'         : Y_train,
