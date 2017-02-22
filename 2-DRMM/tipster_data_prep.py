@@ -52,8 +52,8 @@ def get_article_paras(docid): # return list<str> -- paragraphs of a document
         txt = sel.xpath('//TEXT')[0]
         txt = txt.xpath('string(.)').lower().strip()
         ret = txt.split('   ')
-    if len(ret)>200: # some outliers have MANY paragraphs...
-        ret2 = [] # in this case: merge small paragraphs into larger paragraphs!!
+    if len(ret)>200: # some outliers have MANY paragraphs --> merge small paragraphs!!
+        ret2 = [] 
         mean_len = sum(len(p) for p in ret) // 200
         _buf = []; _buflen = 0
         for p in ret: 
@@ -67,23 +67,24 @@ def get_article_paras(docid): # return list<str> -- paragraphs of a document
 
 print '# load model and preprocessed data'
 # get the same tokenizer during model training
-with open(TP_R52_PK_FPATH, 'rb') as f:
+with open(TP_RCV1_PK_FPATH, 'rb') as f:
     data_pickle = pk.load(f)
     tokenizer = data_pickle['tokenizer']
     del data_pickle 
+
 # get model, turn it into a paragraph embedder
 model = load_model(TP_MODEL_FPATH)
 get_embedvec = K.function( [model.layers[0].input, K.learning_phase()],
                            [model.layers[-4].output] )
 embedvec = lambda X: get_embedvec([X,0])[0]
 
+# define help functions
 def paragraph2vec(paragraph): # turn a piece of text into embedding vector
     seqs = tokenizer.texts_to_sequences([paragraph.encode('utf-8')])
     seqs_padded = pad_sequences(seqs, maxlen=MAX_SEQ_LEN)
     return embedvec(seqs_padded)
 
 def get_article_embeddingvecs(docid):
-    # return np.vstack( [ paragraph2vec(p.encode('ascii','ignore')) for p in  )
     seqs_padded = [] # put all paragphs together,  feed them into embedding model at once
     for para in get_article_paras(docid): 
         para = para.encode('ascii','ignore')
@@ -102,9 +103,8 @@ def get_histvec(query_para, docid):
     dvecs = get_article_embeddingvecs(docid)
     cossims = np.dot(dvecs, qvec.T) / norm(qvec) / norm(dvecs, axis=1)
     hist, _ = np.histogram( cossims, bins=N_HISTBINS, range=(-1,1) )
-    hist = hist * 1.0 / len(cossims) # NORMALIZE the histogram as there are a lot documents with few paras
-    # ret = np.log(hist+1.0) 
-    ret = hist 
+    hist = hist * 1.0  # / len(cossims) NORMALIZE the histogram as there are a lot documents with few paras
+    ret = np.log(hist+1.0) 
     return ret 
 
 def get_query_doc_feature(qid, docid): 

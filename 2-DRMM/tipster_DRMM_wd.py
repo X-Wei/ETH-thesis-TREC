@@ -6,6 +6,10 @@ OUT_PATH = '../data/trec-output/tipster-DRMM'
 if not os.path.exists(OUT_PATH):
     os.makedirs(OUT_PATH)
 
+# TP_DRMM_PK_FPATH = '../data/DRMM_tipster_0215.pk'
+# DATE_TODAY = '0217'
+print TP_DRMM_PK_FPATH
+
 with open(TP_DRMM_PK_FPATH) as f:
     data_pickle = pk.load(f)
 
@@ -43,17 +47,17 @@ def tune_ffwd(feed_forward, suffix = '', instances = instances):
           initial_weights = initial_weights, verbose=0, K = 5, 
           fpath = '%s/%s_5fold%s.rankedlist' % (OUT_PATH, DATE_TODAY, suffix), 
           instances = instances)
-    KFold(ranking_model=ranking_model, scoring_model=scoring_model, data_pickle=data_pickle,
-          initial_weights = initial_weights, verbose=0, K = len(QUERIES),
-          fpath = '%s/%s_LOO%s.rankedlist' % (OUT_PATH, DATE_TODAY, suffix), 
-          instances = instances)
+    # KFold(ranking_model=ranking_model, scoring_model=scoring_model, data_pickle=data_pickle,
+    #       initial_weights = initial_weights, verbose=0, K = len(QUERIES),
+    #       fpath = '%s/%s_LOO%s.rankedlist' % (OUT_PATH, DATE_TODAY, suffix), 
+    #       instances = instances)
 
 
-tune_ffwd(feed_forward, '_original')
-tune_ffwd(ffwd_3layer, '_ffwd3layer')
-tune_ffwd(ffwd_4layer, '_ffwd4layer')
+tune_ffwd(feed_forward, '_original_trecModel')
+tune_ffwd(ffwd_3layer, '_ffwd3layer_trecModel')
+tune_ffwd(ffwd_4layer, '_ffwd4layer_trecModel')
 
 
-tune_ffwd(feed_forward, '_original_unif', instances=instances2)
-tune_ffwd(ffwd_3layer, '_ffwd3layer_unif', instances=instances2)
-tune_ffwd(ffwd_4layer, '_ffwd4layer_unif', instances=instances2)
+tune_ffwd(feed_forward, '_original_unif_trecModel', instances=instances2)
+tune_ffwd(ffwd_3layer, '_ffwd3layer_unif_trecModel', instances=instances2)
+tune_ffwd(ffwd_4layer, '_ffwd4layer_unif_trecModel', instances=instances2)

@@ -7,7 +7,7 @@ import keras.backend as K
 
 from settings import * 
 np.random.seed(1)
-
+N_EPOCHS = 10 
 prefix = 'rcv1'
 pk_data = pk.load(open(RCV1_PK_FPATH, 'rb'))
 
@@ -34,7 +34,7 @@ def compile_fit_evaluate(model, quick_test=False, print_summary=True,
         print '(quick test mode)'
         model.fit(X_train[:100], Y_train[:100], nb_epoch=1)
         return  
-    _callbacks = [EarlyStopping(monitor='val_loss', patience=2)] 
+    _callbacks = [EarlyStopping(monitor='val_loss', patience=1)] 
     if save_log:
         logdir = os.path.join( LOG_PATH, DATE_TODAY+'_'+str(model.name) )
         if not os.path.exists(logdir):
@@ -67,7 +67,7 @@ model_2conv1d_2FC_glove = Sequential(
         Dense(N_LABELS, activation='sigmoid') 
        ], name = '%s_2conv1d_2FC_glove' % prefix)
 
-compile_fit_evaluate(model_2conv1d_2FC_glove, 0)
+# compile_fit_evaluate(model_2conv1d_2FC_glove, 0)
 
 
 model_2conv1d_2FC_glove_d200 = Sequential(

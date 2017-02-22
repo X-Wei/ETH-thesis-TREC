@@ -30,9 +30,10 @@ W2V_FPATH        = '/local/XW/DATA/WORD_EMBEDDINGS/biomed-w2v-200.txt'
 GLOVE_FPATH      = '/local/XW/DATA/WORD_EMBEDDINGS/glove.6B.200d.txt'
 
 # tipster dataset paths
-TP_MODEL_FPATH   = '../models/0218_model_2conv1d_2FC_glove.h5'
+TP_MODEL_FPATH   = '../models/0222_rcv1_2conv1d_2FC_glove.h5'
 TP_R52_PK_FPATH  = '../data/R52_CNN_embedding_preprocessed.pk'
+TP_RCV1_PK_FPATH = '../data/RCV1_CNN_embedding_preprocessed.pk'
 TP_QRELS_FPATH   = '../data/tipster-qrels'
 TP_TOPICS_FPATH  = '../data/tipster-topics'
 TP_DOC_FPATH     = '/local/XW/DATA/tipster/zips'
-TP_DRMM_PK_FPATH = '../data/DRMM_tipster_0219_NH.pk' 
+TP_DRMM_PK_FPATH = '../data/DRMM_tipster_0222_rcv1embedding.pk' 
