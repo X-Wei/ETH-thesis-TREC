@@ -1,31 +1,102 @@
+# coding: utf-8
+
 import gensim
 from gensim import corpora
-import math, os
+import math, os, sys
+from lxml import etree
+from tqdm import tqdm
+
+
+topic_tree = etree.parse('data/topics2016.xml')
+
+def get_topic(i):# returns the summary string of the ith topic
+    summary = topic_tree.xpath('//topic[@number="%d"]/summary/text()'%i)[0]
+    return str(summary).lower()
+
+
+# In[15]:
+
+# get_topic(1)
+
+
+# In[6]:
+
+PMC_PATH = '/local/XW/DATA/TREC/PMCs/'
+pmcid2fpath = {}
+
+for subdir1 in os.listdir(PMC_PATH):
+    for subdir2 in os.listdir(os.path.join(PMC_PATH, subdir1)):
+        diry = os.path.join(PMC_PATH, subdir1, subdir2)
+        for fn in os.listdir(diry):
+            pmcid = fn[:-5]
+            fpath = os.path.join(diry, fn)
+            pmcid2fpath[pmcid] = fpath
+
+
+# In[7]:
+
+def get_article_abstract(pmcid):
+    fpath = pmcid2fpath[pmcid]
+    tree = etree.parse(fpath)
+    ret = u'' + tree.xpath('string(//article-title)') + '\n'
+    abstracts = tree.xpath('//abstract')
+#     abstracts = tree.xpath('//p')
+    ret += u' '.join( [abstract.xpath('string(.)') for abstract in abstracts] )
+    if len(ret.split())<20: 
+        raise Exception(u'abstraction too short: '+ pmcid + ret)
+    return ret.lower()    
+
+
+# In[22]:
+
+documents = [[] for _ in xrange(31)] # documents[i] are pmcids for topic i
+with open('data/qrels.txt') as f:
+    for line in f: 
+        topicid, _, pmcid, relevance = line.split()
+        topicid = int(topicid)
+        documents[topicid].append(pmcid)
+
+
+# In[16]:
+
+# print get_article_abstract('107838')
+
+
+# In[17]:
+
+def get_corpus(t): # get raw data for topic t
+    corpus = []
+    pmcids = []
+    for pmcid in tqdm(documents[t]):
+        try:
+            abstract = get_article_abstract(pmcid)
+            corpus.append( abstract.split() )
+            pmcids.append(pmcid)
+        except:
+            pass
+    return pmcids, corpus
+
+
+# In[33]:
 
 class BM25 :
-    def __init__(self, fn_docs, delimiter='|') :
+    def __init__(self, corpus) :
         self.dictionary = corpora.Dictionary()
         self.DF = {}
-        self.delimiter = delimiter
         self.DocTF = []
         self.DocIDF = {}
         self.N = 0
         self.DocAvgLen = 0
-        self.fn_docs = fn_docs
         self.DocLen = []
-        self.buildDictionary()
-        self.TFIDF_Generator()
+        self.buildDictionary(corpus)
+        self.TFIDF_Generator(corpus)
 
-    def buildDictionary(self) :
-        raw_data = []
-        for line in file(self.fn_docs) : # one line per document
-            raw_data.append(line.strip().split(self.delimiter))
-        self.dictionary.add_documents(raw_data)
+    def buildDictionary(self, corpus) :
+        self.dictionary.add_documents(corpus)
 
-    def TFIDF_Generator(self, base=math.e) :
+    def TFIDF_Generator(self, corpus, base=math.e) :
         docTotalLen = 0
-        for line in file(self.fn_docs) :
-            doc = line.strip().split(self.delimiter)
+        for doc in corpus:
             docTotalLen += len(doc)
             self.DocLen.append(len(doc))
             #print self.dictionary.doc2bow(doc)
@@ -68,55 +139,61 @@ class BM25 :
         items.sort()
         return items
 
-from lxml import etree
-topic_tree = etree.parse('data/topics2016.xml')
 
-def get_topic(i):# returns the summary string of the ith topic
-    summary = topic_tree.xpath('//topic[@number="%d"]/summary/text()'%i)[0]
+# In[78]:
+
+def TREC_output(topic_id, run_name = 'bm25', fpath = None):
+    ids, corp = get_corpus(topic_id)
+    bm25 = BM25(corp)
+    query = get_topic(topic_id).split()
+    scores = bm25.BM25Score(query)
+    score_id_pairs = zip(scores, ids) # list of (score, pmcid) tuples
+    ranked_pairs = sorted(score_id_pairs, reverse=False)
+#     print ranked_pairs[:10]
+    fout = sys.stdout if fpath==None else open(fpath, 'a')
+    for rank, (score, pmcid) in enumerate(ranked_pairs[:1000], 1):
+        print >>fout, '%d  Q0  %s  %d  %f  %s' % (topic_id, pmcid, rank, score, run_name)
+
+
+# In[79]:
+
+fpath = 'data/Trec_eval/bm25.txt'
+open(fpath, 'w') # clear previous results
+for t in tqdm(xrange(1,31)):
+    TREC_output(t, fpath=fpath)
+
+
+# In[82]:
+
+def get_topic_desc(i):# returns the summary string of the ith topic
+    summary = topic_tree.xpath('//topic[@number="%d"]/description/text()'%i)[0]
     return str(summary).lower()
 
-PMC_PATH = '/local/XW/DATA/TREC/PMCs/'
-pmcid2fpath = {}
 
-for subdir1 in os.listdir(PMC_PATH):
-    for subdir2 in os.listdir(os.path.join(PMC_PATH, subdir1)):
-        diry = os.path.join(PMC_PATH, subdir1, subdir2)
-        for fn in os.listdir(diry):
-            pmcid = fn[:-5]
-            fpath = os.path.join(diry, fn)
-            pmcid2fpath[pmcid] = fpath
+# In[84]:
 
-def get_article_abstract(pmcid):
-    fpath = pmcid2fpath[pmcid]
-    tree = etree.parse(fpath)
-    ret = u'' + tree.xpath('string(//article-title)') + '\n'
-    abstracts = tree.xpath('//abstract')
-#     abstracts = tree.xpath('//p')
-    ret += u' '.join( [abstract.xpath('string(.)') for abstract in abstracts] )
-    if len(ret.split())<20: 
-        raise Exception(u'abstraction too short: '+pmcid + ret)
-    return ret.lower()    
-    
+def TREC_output_desc(topic_id, run_name = 'bm25', fpath = None):
+    ids, corp = get_corpus(topic_id)
+    bm25 = BM25(corp)
+    query = get_topic_desc(topic_id).split()
+    scores = bm25.BM25Score(query)
+    score_id_pairs = zip(scores, ids) # list of (score, pmcid) tuples
+    ranked_pairs = sorted(score_id_pairs, reverse=False)
+#     print ranked_pairs[:10]
+    fout = sys.stdout if fpath==None else open(fpath, 'a')
+    for rank, (score, pmcid) in enumerate(ranked_pairs[:1000], 1):
+        print >>fout, '%d  Q0  %s  %d  %f  %s' % (topic_id, pmcid, rank, score, run_name)
 
-if __name__ == '__main__' :
-    #mycorpus.txt is as following:
-    '''
-    Human machine interface for lab abc computer applications
-    A survey of user opinion of computer system response time
-    The EPS user interface management system
-    System and human system engineering testing of EPS
-    Relation of user perceived response time to error measurement
-    The generation of random binary unordered trees
-    The intersection graph of paths in trees
-    Graph IV Widths of trees and well quasi ordering
-    Graph minors A survey
-    '''
-    fn_docs = 'mycorpus.txt'
-    #~ bm25 = BM25(fn_docs, delimiter=' ')
-    #~ Query = 'The intersection graph of paths in trees survey Graph'
-    #~ Query = Query.split()
-    #~ scores = bm25.BM25Score(Query)
-    #~ scores_tfidf = bm25.TFIDF()
-    #~ print bm25.Items()
-    #~ for i, tfidfscore in enumerate(scores_tfidf):
-        #~ print i, tfidfscore
+
+# In[85]:
+
+fpath = 'data/Trec_eval/bm25_desc.txt'
+open(fpath, 'w') # clear previous results
+for t in tqdm(xrange(1,31)):
+    TREC_output(t, fpath=fpath)
+
+
+# In[ ]:
+
+#  trec_eval/trec_eval -q -c qrels.txt bm25_desc.txt > bm25_desc.eval
+
