@@ -1,6 +1,6 @@
 # coding: utf-8
 # common imports 
-import os, sys, time
+import os, sys, time, re
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -24,6 +24,8 @@ GLOVE_FPATH = '/local/XW/DATA/WORD_EMBEDDINGS/glove.6B.200d.txt'
 R52_FPATH_TRAIN = '/local/XW/DATA/phd-datasets/r52-train-all-terms.txt'
 R52_FPATH_TEST  = '/local/XW/DATA/phd-datasets/r52-test-all-terms.txt'
 R52_PK_FPATH    = '../data/R52_CNN_embedding_preprocessed.pk'
+RCV1_DIR        = '/local/XW/DATA/rcv1'
+RCV1_PK_FPATH   = '../data/RCV1_CNN_embedding_preprocessed.pk'
 
 # for model training
 MODEL_PATH       = '../models/'
