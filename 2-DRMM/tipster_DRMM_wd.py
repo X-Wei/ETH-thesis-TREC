@@ -44,7 +44,7 @@ def tune_ffwd(feed_forward, suffix = '', instances = instances):
     scoring_model, ranking_model = gen_DRMM_model(MAX_QLEN, feed_forward)
     initial_weights = ranking_model.get_weights()
     KFold(ranking_model=ranking_model, scoring_model=scoring_model, data_pickle=data_pickle,
-          initial_weights = initial_weights, verbose=0, K = 5, 
+          initial_weights = initial_weights, verbose=1, K = 5, 
           fpath = '%s/%s_5fold%s.rankedlist' % (OUT_PATH, DATE_TODAY, suffix), 
           instances = instances)
     # KFold(ranking_model=ranking_model, scoring_model=scoring_model, data_pickle=data_pickle,
@@ -52,12 +52,15 @@ def tune_ffwd(feed_forward, suffix = '', instances = instances):
     #       fpath = '%s/%s_LOO%s.rankedlist' % (OUT_PATH, DATE_TODAY, suffix), 
     #       instances = instances)
 
+if 1: 
+    tune_ffwd(feed_forward, '_original_rcv1')
+    tune_ffwd(ffwd_3layer, '_ffwd3layer_rcv1')
+    tune_ffwd(ffwd_4layer, '_ffwd4layer_rcv1')
 
-tune_ffwd(feed_forward, '_original_trecModel')
-tune_ffwd(ffwd_3layer, '_ffwd3layer_trecModel')
-tune_ffwd(ffwd_4layer, '_ffwd4layer_trecModel')
 
-
-tune_ffwd(feed_forward, '_original_unif_trecModel', instances=instances2)
-tune_ffwd(ffwd_3layer, '_ffwd3layer_unif_trecModel', instances=instances2)
-tune_ffwd(ffwd_4layer, '_ffwd4layer_unif_trecModel', instances=instances2)
+    tune_ffwd(feed_forward, '_original_unif_rcv1', instances=instances2)
+    tune_ffwd(ffwd_3layer, '_ffwd3layer_unif_rcv1', instances=instances2)
+    tune_ffwd(ffwd_4layer, '_ffwd4layer_unif_rcv1', instances=instances2)
+    
+    # to run the evaluation (in trec-outputs folder): 
+    # ./trec_eval -m ndcg_cut.20 -m map -m P.20 qrels-tipster.txt <output-file-name>

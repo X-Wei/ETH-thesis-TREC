@@ -8,6 +8,10 @@ from keras.preprocessing.sequence import pad_sequences
 
 from settings import * 
 np.random.seed(1) 
+
+MODEL_FPATH = '../models/0303_model_2conv1d_glove_2drop.h5'
+DRMM_PK_FPATH = '../data/DRMM+embedding_processed_0307_model_2conv1d_glove.pk'
+
 global QUERIES, MAX_QLEN, candidates, relevances, n_pos, IDFs, qid_docid2histvec, instances
 
 def memoize_1arg(f):
@@ -143,12 +147,8 @@ if __name__ == '__main__':
     def pad_query(q, SZ=MAX_QLEN): return q + [PARA_PLACEHOLDER]*(SZ-len(q))
     for i,q in QUERIES.items():
         QUERIES[i] = pad_query(q)
-
-    print '# populate `IDFs`'
-    def idf(para): return -10 if para==PARA_PLACEHOLDER else 1.0 
-    for qid in QUERIES.keys(): 
-        IDFs[qid] = np.array([idf(para) for para in QUERIES[qid]])
     
+    corpus = {}
     print '# populate `candidates`, `relevance`, `n_pos`'
     with open(QRELS_FPATH) as f:
         for line in tqdm(f, total=37707): 
@@ -159,11 +159,26 @@ if __name__ == '__main__':
                     continue
                 relevance[(qid,pmcid)] =rel
                 candidates[qid].append(pmcid)
+                #corpus[pmcid] = '\n\n\n'.join( get_article_paragraphs(pmcid) )
                 if rel>0: n_pos[qid] += 1
             except: pass
 
+    print '# populate `IDFs`'
+    #from sklearn.feature_extraction.text import TfidfVectorizer
+    #vectorizer = TfidfVectorizer()
+    #vectorizer.fit_transform(corpus.itervalues())
+    #vocab = vectorizer.vocabulary_ # mapping word to its internal index
+
+    def idf(para): # for a paragraph, the idf = max idf among all its words
+        if para==PARA_PLACEHOLDER: return -10.0
+        else: return 1.0
+            #return max(vectorizer.idf_[vocab[wd]] if wd in vocab else -1.0 for wd in re.split('\W', para)) 
+    for qid in QUERIES.keys(): 
+        IDFs[qid] = np.array([idf(para) for para in QUERIES[qid]])
+    
     print '# populate `qid_docid2histvec`'
     for qid in QUERIES.keys():
+        print qid 
         for docid in tqdm(candidates[qid]):
             _hist = get_query_doc_feature(qid, docid).reshape(1, MAX_QLEN, N_HISTBINS)
             qid_docid2histvec[(qid, docid)] = _hist

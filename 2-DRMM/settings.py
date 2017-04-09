@@ -9,8 +9,8 @@ from collections import defaultdict, Counter
 
 # constants
 DATE_TODAY       = time.strftime('%m%d')
-MAX_SEQ_LEN      = 500
-MAX_NB_WORDS     = 100000 # top 20k most freq words
+MAX_SEQ_LEN      = 1000
+MAX_NB_WORDS     = 100000 # top K most freq words
 WD_PLACEHOLDER   = '</s>'
 PARA_PLACEHOLDER = '</s>'
 N_HISTBINS       = 30 # number of histograms in DRMM model

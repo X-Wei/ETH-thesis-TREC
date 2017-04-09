@@ -53,7 +53,7 @@ def TREC_output(qid, scoring_model, candidates, qid_docid2histvec, IDFs, \
     for rank, (score, docid) in enumerate(res[:2000]):
         print >>fout, '%d  Q0  %s  %d  %f  %s' % (qid, docid, rank, score, run_name)
 
-_callbacks = [ EarlyStopping(monitor='val_loss', patience=2),
+_callbacks = [ # EarlyStopping(monitor='val_loss', patience=2),
                TensorBoard(log_dir=LOGDIR, histogram_freq=0, write_graph=False) ]
 
 
@@ -127,8 +127,12 @@ def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles', ver
     instances = {}
     from numpy.random import choice 
     np.random.seed(1)
+
+    all_pos = sorted( n_pos.values() ) 
+    if verbose: 
+        print all_pos
+
     if mode == 'quantiles': 
-        all_pos = sorted( n_pos.values() ) 
         quantile_1 = all_pos[len(all_pos) * 5 / 30] # x10
         quantile_2 = all_pos[len(all_pos) * 5 / 10 - 2] # x3
         quantile_3 = all_pos[len(all_pos) * 9 / 10 - 1] # x1.5
@@ -179,7 +183,9 @@ def gen_instances(QUERIES, relevance, candidates, n_pos, mode = 'quantiles', ver
             instances[qid] = instances_for_q
 
     elif mode == 'uniform':
-        N_PAIRS_PER_QUERY = 8000 # the smallest query (22) have 8816 possible pairs 
+        n_pairs = [n_pos[qid] * (len(candidates[qid])-n_pos[qid]) for qid in candidates.keys()]
+        if verbose: print n_pairs
+        N_PAIRS_PER_QUERY = min(n_pairs) // 1000 * 1000 
         for qid in QUERIES.keys():
             rel_scores = defaultdict(list) # mapping a rel score to list of docids
             for docid in candidates[qid]:
